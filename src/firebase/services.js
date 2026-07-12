@@ -55,17 +55,21 @@ export const getProductsByCategory = async (category) => {
 }
 
 export const addProduct = async (productData) => {
+  // Strip 'id' if present — Firestore generates its own
+  const { id, ...data } = productData
   return await addDoc(collection(db, 'products'), {
-    ...productData,
+    ...data,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
 }
 
 export const updateProduct = async (productId, updates) => {
+  // CRITICAL: Strip 'id' from updates — Firestore rejects it
+  const { id, ...cleanUpdates } = updates
   const docRef = doc(db, 'products', productId)
   await updateDoc(docRef, {
-    ...updates,
+    ...cleanUpdates,
     updatedAt: serverTimestamp(),
   })
 }
@@ -91,7 +95,6 @@ export const signupUser = async (email, password, firstName, lastName) => {
   await updateProfile(userCredential.user, {
     displayName: `${firstName} ${lastName}`,
   })
-  // Create user document in Firestore
   await setDoc(doc(db, 'users', userCredential.user.uid), {
     email,
     firstName,

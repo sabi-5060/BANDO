@@ -38,6 +38,9 @@ export const useStore = create(
           const products = await getAllProducts()
           if (products.length > 0) {
             set({ products, productsLoading: false })
+          } else {
+            // Firestore empty, keep local fallback
+            set({ productsLoading: false })
           }
         } catch (error) {
           console.error('Failed to load products:', error)
@@ -45,54 +48,76 @@ export const useStore = create(
         }
       },
 
+      // CRITICAL FIX: Always update local state immediately.
+      // Try Firebase in background. If it fails, local still works.
       updateProduct: async (id, updates) => {
+        // Update local state FIRST (instant UI feedback)
+        set((state) => ({
+          products: state.products.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          ),
+        }))
+
+        // Then sync to Firebase (background)
         try {
           await fbUpdateProduct(id, updates)
-          set((state) => ({
-            products: state.products.map((p) =>
-              p.id === id ? { ...p, ...updates } : p
-            ),
-          }))
         } catch (error) {
-          console.error('Failed to update product:', error)
+          console.warn('Firebase update failed (product may not exist in DB yet):', error.message)
         }
       },
 
       addProduct: async (product) => {
+        let newProduct = { ...product, id: 'prod-' + Date.now() }
+        
+        // Update local state FIRST
+        set((state) => ({
+          products: [...state.products, newProduct],
+        }))
+
+        // Then sync to Firebase
         try {
           const docRef = await fbAddProduct(product)
-          const newProduct = { id: docRef.id, ...product }
+          // Replace local ID with Firestore ID
+          newProduct = { id: docRef.id, ...product }
           set((state) => ({
-            products: [...state.products, newProduct],
+            products: state.products.map((p) =>
+              p.id === 'prod-' + Date.now() ? newProduct : p
+            ),
           }))
-          return docRef.id
         } catch (error) {
-          console.error('Failed to add product:', error)
-          return null
+          console.warn('Firebase add failed, product exists locally only:', error.message)
         }
+        
+        return newProduct.id
       },
 
       deleteProduct: async (id) => {
+        // Update local state FIRST
+        set((state) => ({
+          products: state.products.filter((p) => p.id !== id),
+        }))
+
+        // Then sync to Firebase
         try {
           await fbDeleteProduct(id)
-          set((state) => ({
-            products: state.products.filter((p) => p.id !== id),
-          }))
         } catch (error) {
-          console.error('Failed to delete product:', error)
+          console.warn('Firebase delete failed:', error.message)
         }
       },
 
       declareSoldOut: async (id) => {
+        // Update local state FIRST
+        set((state) => ({
+          products: state.products.map((p) =>
+            p.id === id ? { ...p, inStock: false, stockCount: 0 } : p
+          ),
+        }))
+
+        // Then sync to Firebase
         try {
           await fbDeclareSoldOut(id)
-          set((state) => ({
-            products: state.products.map((p) =>
-              p.id === id ? { ...p, inStock: false, stockCount: 0 } : p
-            ),
-          }))
         } catch (error) {
-          console.error('Failed to declare sold out:', error)
+          console.warn('Firebase declareSoldOut failed:', error.message)
         }
       },
 
@@ -158,7 +183,6 @@ export const useStore = create(
           const newFavorites = isFav
             ? state.favorites.filter((id) => id !== productId)
             : [...state.favorites, productId]
-          // Sync to Firebase if user is logged in
           const { user } = state
           if (user?.uid && user.uid !== 'admin-1') {
             updateUserFavorites(user.uid, newFavorites).catch(console.error)
@@ -245,7 +269,7 @@ export const useStore = create(
           return true
         } catch (error) {
           console.error('Login failed:', error)
-          // Fallback for demo without Firebase Auth set up
+          // Fallback for demo without Firebase Auth
           if (email && password.length >= 6) {
             set({
               user: {
@@ -347,7 +371,6 @@ export const useStore = create(
           return docRef.id
         } catch (error) {
           console.error('Failed to create order:', error)
-          // Fallback: add to local state only
           const localOrder = { id: 'order-' + Date.now(), ...orderWithUser }
           set((state) => ({
             orders: [localOrder, ...state.orders],

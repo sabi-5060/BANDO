@@ -153,11 +153,13 @@ export default function AdminDashboard() {
               {(showAddForm || editingProduct) && (
                 <ProductForm
                   product={editingProduct}
-                  onSave={(product) => {
+                  onSave={(productData) => {
                     if (editingProduct) {
-                      updateProduct(product.id, product)
+                      // CRITICAL FIX: Pass the ORIGINAL editingProduct.id
+                      // The form data may have a different or missing id
+                      updateProduct(editingProduct.id, productData)
                     } else {
-                      addProduct(product)
+                      addProduct(productData)
                     }
                     setEditingProduct(null)
                     setShowAddForm(false)
@@ -286,9 +288,9 @@ export default function AdminDashboard() {
                       <tr key={order.id} className="border-b border-bando-graphite/30 hover:bg-bando-black/20 transition-colors">
                         <td className="p-4 font-mono text-sm">{order.id.slice(0, 12)}</td>
                         <td className="p-4 text-sm text-bando-ash">{formatDate(order.createdAt)}</td>
-                        <td className="p-4 text-sm">{order.shippingAddress.fullName}</td>
+                        <td className="p-4 text-sm">{order.shippingAddress?.fullName || 'Guest'}</td>
                         <td className="p-4 font-semibold">{formatPrice(order.total)}</td>
-                        <td className="p-4 text-sm text-bando-ash capitalize">{order.paymentMethod}</td>
+                        <td className="p-4 text-sm text-bando-ash capitalize">{order.paymentMethod || 'N/A'}</td>
                         <td className="p-4">
                           <select
                             value={order.status}
@@ -328,26 +330,18 @@ export default function AdminDashboard() {
 // ============================================
 function ProductForm({ product, onSave, onCancel }) {
   const fileInputRef = useRef(null)
-  const [imageMode, setImageMode] = useState('url') // 'url' or 'file'
+  const [imageMode, setImageMode] = useState('url')
   const [imageUrlInput, setImageUrlInput] = useState('')
   const [previewImages, setPreviewImages] = useState(product?.images || [])
   
-  // Color editing state
   const [newColorName, setNewColorName] = useState('')
   const [newColorHex, setNewColorHex] = useState('#0a0a0a')
-  
-  // Size editing state
   const [newSize, setNewSize] = useState('')
-  
-  // Details list editing state
   const [newDetail, setNewDetail] = useState('')
-  
-  // Care instructions editing state
   const [newCareItem, setNewCareItem] = useState('')
   
   const [formData, setFormData] = useState(
     product || {
-      id: 'prod-' + Date.now(),
       name: '',
       description: '',
       price: 0,
@@ -747,7 +741,6 @@ function ProductForm({ product, onSave, onCancel }) {
             <span className="text-xs text-bando-ash">{formData.colors?.length || 0} color(s)</span>
           </div>
 
-          {/* Existing Colors */}
           <div className="flex flex-wrap gap-3 mb-4">
             <AnimatePresence>
               {formData.colors?.map((color, index) => (
@@ -782,7 +775,6 @@ function ProductForm({ product, onSave, onCancel }) {
             </AnimatePresence>
           </div>
 
-          {/* Add New Color */}
           <div className="flex gap-3 items-end">
             <div className="flex-1">
               <label className="block text-xs text-bando-ash mb-1">Color Name</label>
@@ -827,7 +819,6 @@ function ProductForm({ product, onSave, onCancel }) {
             <span className="text-xs text-bando-ash">{formData.sizes?.length || 0} size(s)</span>
           </div>
 
-          {/* Existing Sizes */}
           <div className="flex flex-wrap gap-2 mb-4">
             <AnimatePresence>
               {formData.sizes?.map((size, index) => (
@@ -867,7 +858,6 @@ function ProductForm({ product, onSave, onCancel }) {
             </AnimatePresence>
           </div>
 
-          {/* Add New Size */}
           <div className="flex gap-2">
             <input
               type="text"
