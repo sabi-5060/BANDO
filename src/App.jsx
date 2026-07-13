@@ -6,6 +6,7 @@ import Navbar from './components/Navbar'
 import CartDrawer from './components/CartDrawer'
 import Footer from './components/Footer'
 import ProtectedRoute from './components/ProtectedRoute'
+import { AuthProvider } from './context/AuthContext'
 
 // Pages
 import HomePage from './pages/HomePage'
@@ -26,7 +27,7 @@ import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsOfServicePage from './pages/TermsOfServicePage'
 
 // ============================================
-// ScrollToTop — scrolls to top on every route change
+// ScrollToTop
 // ============================================
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -40,14 +41,9 @@ function ScrollToTop() {
 // App
 // ============================================
 export default function App() {
-  const initAuth = useStore((state) => state.initAuth)
   const loadProducts = useStore((state) => state.loadProducts)
 
-  // Initialize Firebase Auth listener on mount
-  useEffect(() => {
-    const unsubscribe = initAuth()
-    return () => unsubscribe()
-  }, [initAuth])
+  // REMOVE initAuth useEffect — AuthProvider handles auth now
 
   // Load products from Firestore on mount
   useEffect(() => {
@@ -55,47 +51,49 @@ export default function App() {
   }, [loadProducts])
 
   return (
-    <div className="min-h-screen bg-bando-black text-bando-white">
-      <ScrollToTop />
-      <Navbar />
-      <CartDrawer />
-      <main>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/shop" element={<ShopPage />} />
-          <Route path="/product/:id" element={<ProductDetailPage />} />
-          <Route path="/george-stinney" element={<GeorgeStinneyPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/favorites" element={<FavoritesPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/shipping-returns" element={<ShippingReturnsPage />} />
-          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
-          <Route path="/terms-of-service" element={<TermsOfServicePage />} />
-          <Route path="/account" element={
-            <ProtectedRoute>
-              <AccountPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/checkout" element={
-            <ProtectedRoute>
-              <CheckoutPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/order-success" element={
-            <ProtectedRoute>
-              <OrderSuccessPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin" element={
-            <ProtectedRoute requireAdmin>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-        </Routes>
-      </main>
-      <Footer />
-    </div>
+    <AuthProvider>   {/* ← WRAP EVERYTHING */}
+      <div className="min-h-screen bg-bando-black text-bando-white">
+        <ScrollToTop />
+        <Navbar />
+        <CartDrawer />
+        <main>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/shop" element={<ShopPage />} />
+            <Route path="/product/:id" element={<ProductDetailPage />} />
+            <Route path="/george-stinney" element={<GeorgeStinneyPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/favorites" element={<FavoritesPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/shipping-returns" element={<ShippingReturnsPage />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms-of-service" element={<TermsOfServicePage />} />
+            <Route path="/account" element={
+              <ProtectedRoute>
+                <AccountPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/checkout" element={
+              <ProtectedRoute>
+                <CheckoutPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/order-success" element={
+              <ProtectedRoute>
+                <OrderSuccessPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <ProtectedRoute requireAdmin>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </main>
+        <Footer />
+      </div>
+    </AuthProvider>   
   )
 }

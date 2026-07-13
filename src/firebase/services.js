@@ -106,9 +106,33 @@ export const signupUser = async (email, password, firstName, lastName) => {
   return userCredential.user
 }
 
+// Regular user login
 export const loginUser = async (email, password) => {
   const userCredential = await signInWithEmailAndPassword(auth, email, password)
   return userCredential.user
+}
+
+// ADMIN login — checks custom claim
+export const loginAdmin = async (email, password) => {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password)
+  
+  // Force refresh to get latest custom claims
+  const idTokenResult = await userCredential.user.getIdTokenResult(true)
+  
+  if (idTokenResult.claims?.admin !== true) {
+    // Not an admin — sign them out immediately
+    await signOut(auth)
+    throw new Error('Access denied: This account is not authorized as admin.')
+  }
+  
+  return userCredential.user
+}
+
+// Check if current user has admin claim
+export const checkIsAdmin = async (user) => {
+  if (!user) return false
+  const idTokenResult = await user.getIdTokenResult(true)
+  return idTokenResult.claims?.admin === true
 }
 
 export const logoutUser = async () => {
