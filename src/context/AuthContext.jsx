@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { onAuthChange, checkIsAdmin, logoutUser } from '../services/services'
+import { onAuthChange, checkIsAdmin, logoutUser } from '../firebase/services'
 
 const AuthContext = createContext()
 
