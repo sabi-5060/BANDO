@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
+import { useStore } from './store/useStore'
 import Navbar from './components/Navbar'
 import CartDrawer from './components/CartDrawer'
 import Footer from './components/Footer'
@@ -44,7 +45,20 @@ function ScrollToTop() {
 }
 
 export default function App() {
+  const initAuth = useStore((s) => s.initAuth)
+  const subscribeToProducts = useStore((s) => s.subscribeToProducts)
+
+  useEffect(() => {
+    const unsubAuth = initAuth()
+    const unsubProducts = subscribeToProducts()
+    return () => {
+      unsubAuth?.()
+      unsubProducts?.()
+    }
+  }, [])
+
   return (
+    
     <div className="min-h-screen bg-bando-black text-bando-white">
       <ScrollToTop />
       <Navbar />
@@ -91,4 +105,5 @@ export default function App() {
       <Footer />
     </div>
   )
+  
 }

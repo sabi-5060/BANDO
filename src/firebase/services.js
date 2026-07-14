@@ -20,6 +20,15 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import { db, auth } from './config'
+import { onSnapshot } from 'firebase/firestore'
+
+export const subscribeToProducts = (callback) => {
+  const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'))
+  return onSnapshot(q, (snapshot) => {
+    const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    callback(products)
+  })
+}
 
 // ============================================
 // PRODUCTS

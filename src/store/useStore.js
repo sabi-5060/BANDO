@@ -5,7 +5,7 @@ import {
   onAuthChange,
   getUserData,
   updateUserFavorites,
-  getAllProducts,
+  subscribeToProducts,
   addProduct as fbAddProduct,
   updateProduct as fbUpdateProduct,
   deleteProduct as fbDeleteProduct,
@@ -19,11 +19,6 @@ import {
   updateOrderStatus as fbUpdateOrderStatus,
 } from '../firebase/services'
 
-const ADMIN_CREDENTIALS = {
-  email: 'admin@bando.com',
-  password: 'bando1944',
-}
-
 export const useStore = create(
   persist(
     (set, get) => ({
@@ -31,93 +26,81 @@ export const useStore = create(
       products: initialProducts,
       productsLoading: false,
       productsError: null,
+      _unsubProducts: null,
 
-      loadProducts: async () => {
+      // Live subscription — call once on app mount (see App.jsx).
+      // Every device gets pushed updates automatically, no reload needed.
+      subscribeToProducts: () => {
+        // Avoid double-subscribing if called more than once
+        const existing = get()._unsubProducts
+        if (existing) existing()
+
         set({ productsLoading: true, productsError: null })
-        try {
-          const products = await getAllProducts()
-          if (products.length > 0) {
-            set({ products, productsLoading: false })
-          } else {
-            // Firestore empty, keep local fallback
-            set({ productsLoading: false })
+
+        const unsubscribe = subscribeToProducts(
+          (products) => {
+            if (products.length > 0) {
+              set({ products, productsLoading: false })
+            } else {
+              // Firestore empty — keep local fallback list visible
+              set({ productsLoading: false })
+            }
+          },
+          (error) => {
+            console.error('Product subscription failed:', error)
+            set({ productsError: error.message, productsLoading: false })
           }
-        } catch (error) {
-          console.error('Failed to load products:', error)
-          set({ productsError: error.message, productsLoading: false })
+        )
+
+        set({ _unsubProducts: unsubscribe })
+        return unsubscribe
+      },
+
+      unsubscribeFromProducts: () => {
+        const unsub = get()._unsubProducts
+        if (unsub) {
+          unsub()
+          set({ _unsubProducts: null })
         }
       },
 
-      // CRITICAL FIX: Always update local state immediately.
-      // Try Firebase in background. If it fails, local still works.
+      // Writes go straight to Firestore. No optimistic local mutation —
+      // the onSnapshot listener above will update `products` for us
+      // once the write lands, on THIS device and every other one.
       updateProduct: async (id, updates) => {
-        // Update local state FIRST (instant UI feedback)
-        set((state) => ({
-          products: state.products.map((p) =>
-            p.id === id ? { ...p, ...updates } : p
-          ),
-        }))
-
-        // Then sync to Firebase (background)
         try {
           await fbUpdateProduct(id, updates)
         } catch (error) {
-          console.warn('Firebase update failed (product may not exist in DB yet):', error.message)
+          console.error('Firestore update failed:', error.message)
+          throw error // let the UI (admin dashboard) know it failed
         }
       },
 
       addProduct: async (product) => {
-        let newProduct = { ...product, id: 'prod-' + Date.now() }
-        
-        // Update local state FIRST
-        set((state) => ({
-          products: [...state.products, newProduct],
-        }))
-
-        // Then sync to Firebase
         try {
           const docRef = await fbAddProduct(product)
-          // Replace local ID with Firestore ID
-          newProduct = { id: docRef.id, ...product }
-          set((state) => ({
-            products: state.products.map((p) =>
-              p.id === 'prod-' + Date.now() ? newProduct : p
-            ),
-          }))
+          return docRef.id
         } catch (error) {
-          console.warn('Firebase add failed, product exists locally only:', error.message)
+          console.error('Firestore add failed:', error.message)
+          throw error
         }
-        
-        return newProduct.id
       },
 
       deleteProduct: async (id) => {
-        // Update local state FIRST
-        set((state) => ({
-          products: state.products.filter((p) => p.id !== id),
-        }))
-
-        // Then sync to Firebase
         try {
           await fbDeleteProduct(id)
         } catch (error) {
-          console.warn('Firebase delete failed:', error.message)
+          console.error('Firestore delete failed:', error.message)
+          throw error
         }
       },
 
       declareSoldOut: async (id) => {
-        // Update local state FIRST
-        set((state) => ({
-          products: state.products.map((p) =>
-            p.id === id ? { ...p, inStock: false, stockCount: 0 } : p
-          ),
-        }))
-
-        // Then sync to Firebase
         try {
           await fbDeclareSoldOut(id)
         } catch (error) {
-          console.warn('Firebase declareSoldOut failed:', error.message)
+          console.error('Firestore declareSoldOut failed:', error.message)
+          throw error
         }
       },
 
@@ -184,7 +167,7 @@ export const useStore = create(
             ? state.favorites.filter((id) => id !== productId)
             : [...state.favorites, productId]
           const { user } = state
-          if (user?.uid && user.uid !== 'admin-1') {
+          if (user?.uid) {
             updateUserFavorites(user.uid, newFavorites).catch(console.error)
           }
           return { favorites: newFavorites }
@@ -195,6 +178,10 @@ export const useStore = create(
       clearFavorites: () => set({ favorites: [] }),
 
       // ─── AUTH ───
+      // NOTE: There is no hardcoded admin fallback anymore. Admin status
+      // now comes ONLY from a real Firebase Auth custom claim (admin: true),
+      // set via the Admin SDK script. This matches your Firestore rules,
+      // which check request.auth.token.admin == true.
       user: null,
       isAuthenticated: false,
       isAdmin: false,
@@ -204,17 +191,28 @@ export const useStore = create(
         const unsubscribe = onAuthChange(async (firebaseUser) => {
           if (firebaseUser) {
             try {
+              // Force-refresh the token so newly-set custom claims
+              // (like admin: true) are picked up, not a stale cached token.
+              const tokenResult = await firebaseUser.getIdTokenResult(true)
+              const isAdmin = tokenResult.claims.admin === true
+
               const userData = await getUserData(firebaseUser.uid)
               set({
                 user: {
                   uid: firebaseUser.uid,
                   email: firebaseUser.email,
-                  firstName: userData?.firstName || firebaseUser.displayName?.split(' ')[0] || 'User',
-                  lastName: userData?.lastName || firebaseUser.displayName?.split(' ')[1] || '',
-                  isAdmin: userData?.isAdmin || false,
+                  firstName:
+                    userData?.firstName ||
+                    firebaseUser.displayName?.split(' ')[0] ||
+                    'User',
+                  lastName:
+                    userData?.lastName ||
+                    firebaseUser.displayName?.split(' ')[1] ||
+                    '',
+                  isAdmin,
                 },
                 isAuthenticated: true,
-                isAdmin: userData?.isAdmin || false,
+                isAdmin,
                 favorites: userData?.favorites || [],
                 authLoading: false,
               })
@@ -235,62 +233,45 @@ export const useStore = create(
       },
 
       login: async (email, password) => {
-        // Admin fallback (for demo/testing without Firebase Auth)
-        if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
-          set({
-            user: {
-              uid: 'admin-1',
-              email: ADMIN_CREDENTIALS.email,
-              firstName: 'BANDO',
-              lastName: 'Admin',
-              isAdmin: true,
-            },
-            isAuthenticated: true,
-            isAdmin: true,
-          })
-          return true
-        }
-
         try {
           const firebaseUser = await loginUser(email, password)
+          const tokenResult = await firebaseUser.getIdTokenResult(true)
+          const isAdmin = tokenResult.claims.admin === true
           const userData = await getUserData(firebaseUser.uid)
+
           set({
             user: {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
-              firstName: userData?.firstName || firebaseUser.displayName?.split(' ')[0] || 'User',
-              lastName: userData?.lastName || firebaseUser.displayName?.split(' ')[1] || '',
-              isAdmin: userData?.isAdmin || false,
+              firstName:
+                userData?.firstName ||
+                firebaseUser.displayName?.split(' ')[0] ||
+                'User',
+              lastName:
+                userData?.lastName ||
+                firebaseUser.displayName?.split(' ')[1] ||
+                '',
+              isAdmin,
             },
             isAuthenticated: true,
-            isAdmin: userData?.isAdmin || false,
+            isAdmin,
             favorites: userData?.favorites || [],
           })
           return true
         } catch (error) {
-          console.error('Login failed:', error)
-          // Fallback for demo without Firebase Auth
-          if (email && password.length >= 6) {
-            set({
-              user: {
-                uid: 'user-' + Date.now(),
-                email,
-                firstName: 'User',
-                lastName: '',
-                isAdmin: false,
-              },
-              isAuthenticated: true,
-              isAdmin: false,
-            })
-            return true
-          }
+          console.error('Login failed:', error.message)
           return false
         }
       },
 
       signup: async (data) => {
         try {
-          const firebaseUser = await signupUser(data.email, data.password, data.firstName, data.lastName)
+          const firebaseUser = await signupUser(
+            data.email,
+            data.password,
+            data.firstName,
+            data.lastName
+          )
           set({
             user: {
               uid: firebaseUser.uid,
@@ -305,20 +286,8 @@ export const useStore = create(
           })
           return true
         } catch (error) {
-          console.error('Signup failed:', error)
-          // Fallback for demo
-          set({
-            user: {
-              uid: 'user-' + Date.now(),
-              email: data.email,
-              firstName: data.firstName,
-              lastName: data.lastName,
-              isAdmin: false,
-            },
-            isAuthenticated: true,
-            isAdmin: false,
-          })
-          return true
+          console.error('Signup failed:', error.message)
+          return false
         }
       },
 
@@ -362,34 +331,21 @@ export const useStore = create(
           ...order,
           userId: user?.uid || 'guest',
         }
-        try {
-          const docRef = await fbCreateOrder(orderWithUser)
-          const newOrder = { id: docRef.id, ...orderWithUser }
-          set((state) => ({
-            orders: [newOrder, ...state.orders],
-          }))
-          return docRef.id
-        } catch (error) {
-          console.error('Failed to create order:', error)
-          const localOrder = { id: 'order-' + Date.now(), ...orderWithUser }
-          set((state) => ({
-            orders: [localOrder, ...state.orders],
-          }))
-          return localOrder.id
-        }
+        const docRef = await fbCreateOrder(orderWithUser)
+        const newOrder = { id: docRef.id, ...orderWithUser }
+        set((state) => ({
+          orders: [newOrder, ...state.orders],
+        }))
+        return docRef.id
       },
 
       updateOrderStatus: async (orderId, status) => {
-        try {
-          await fbUpdateOrderStatus(orderId, status)
-          set((state) => ({
-            orders: state.orders.map((o) =>
-              o.id === orderId ? { ...o, status } : o
-            ),
-          }))
-        } catch (error) {
-          console.error('Failed to update order status:', error)
-        }
+        await fbUpdateOrderStatus(orderId, status)
+        set((state) => ({
+          orders: state.orders.map((o) =>
+            o.id === orderId ? { ...o, status } : o
+          ),
+        }))
       },
 
       // ─── UI ───
@@ -399,7 +355,8 @@ export const useStore = create(
       setMobileMenuOpen: (open) => set({ isMobileMenuOpen: open }),
 
       // ─── RESET ───
-      resetStore: () =>
+      resetStore: () => {
+        get().unsubscribeFromProducts?.()
         set({
           products: initialProducts,
           cart: [],
@@ -410,11 +367,15 @@ export const useStore = create(
           isCartOpen: false,
           isMobileMenuOpen: false,
           favorites: [],
-        }),
+        })
+      },
     }),
     {
       name: 'bando-store',
       storage: createJSONStorage(() => localStorage),
+      // Only cart + favorites persist locally. Products and auth
+      // ALWAYS come from Firestore/Firebase Auth — never from
+      // localStorage — so every device stays in sync.
       partialize: (state) => ({
         cart: state.cart,
         favorites: state.favorites,
