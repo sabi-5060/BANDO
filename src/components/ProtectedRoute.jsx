@@ -1,26 +1,16 @@
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useStore } from '../store/useStore'
 
 export default function ProtectedRoute({ children, requireAdmin = false }) {
-  const { user, isAdmin, loading } = useAuth()
+  const { isAuthenticated, isAdmin } = useStore()
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-bando-black flex items-center justify-center">
-        <div className="animate-pulse text-bando-ash">Loading...</div>
-      </div>
-    )
-  }
-
-  // Not logged in at all → login page
-  if (!user) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
 
-  // Logged in but needs admin and isn't → home page
   if (requireAdmin && !isAdmin) {
     return <Navigate to="/" replace />
   }
 
-  return children
+  return <>{children}</>
 }

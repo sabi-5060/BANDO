@@ -55,21 +55,17 @@ export const getProductsByCategory = async (category) => {
 }
 
 export const addProduct = async (productData) => {
-  // Strip 'id' if present — Firestore generates its own
-  const { id, ...data } = productData
   return await addDoc(collection(db, 'products'), {
-    ...data,
+    ...productData,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
 }
 
 export const updateProduct = async (productId, updates) => {
-  // CRITICAL: Strip 'id' from updates — Firestore rejects it
-  const { id, ...cleanUpdates } = updates
   const docRef = doc(db, 'products', productId)
   await updateDoc(docRef, {
-    ...cleanUpdates,
+    ...updates,
     updatedAt: serverTimestamp(),
   })
 }
@@ -95,6 +91,7 @@ export const signupUser = async (email, password, firstName, lastName) => {
   await updateProfile(userCredential.user, {
     displayName: `${firstName} ${lastName}`,
   })
+  // Create user document in Firestore
   await setDoc(doc(db, 'users', userCredential.user.uid), {
     email,
     firstName,
@@ -106,33 +103,9 @@ export const signupUser = async (email, password, firstName, lastName) => {
   return userCredential.user
 }
 
-// Regular user login
 export const loginUser = async (email, password) => {
   const userCredential = await signInWithEmailAndPassword(auth, email, password)
   return userCredential.user
-}
-
-// ADMIN login — checks custom claim
-export const loginAdmin = async (email, password) => {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password)
-  
-  // Force refresh to get latest custom claims
-  const idTokenResult = await userCredential.user.getIdTokenResult(true)
-  
-  if (idTokenResult.claims?.admin !== true) {
-    // Not an admin — sign them out immediately
-    await signOut(auth)
-    throw new Error('Access denied: This account is not authorized as admin.')
-  }
-  
-  return userCredential.user
-}
-
-// Check if current user has admin claim
-export const checkIsAdmin = async (user) => {
-  if (!user) return false
-  const idTokenResult = await user.getIdTokenResult(true)
-  return idTokenResult.claims?.admin === true
 }
 
 export const logoutUser = async () => {
