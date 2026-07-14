@@ -21,9 +21,10 @@ export default {
         }
       },
       fontFamily: {
-        display: ['Playfair Display', 'serif'],
+        display: ["Outfit", "sans-serif"],
         body: ['Inter', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
+        signature: ['Great Vibes', 'cursive']
       },
       animation: {
         'fade-in': 'fadeIn 0.6s ease-out forwards',
