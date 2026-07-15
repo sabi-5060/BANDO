@@ -17,6 +17,8 @@ import {
   getUserOrders as fbGetUserOrders,
   getAllOrders as fbGetAllOrders,
   updateOrderStatus as fbUpdateOrderStatus,
+  signInWithGoogle,
+  handleGoogleRedirectResult,
 } from '../firebase/services'
 
 export const useStore = create(
@@ -304,6 +306,51 @@ export const useStore = create(
           cart: [],
           favorites: [],
         })
+      },
+
+      // ─── GOOGLE SIGN-IN (redirect-based) ───
+      // signInWithRedirect navigates the whole page away to Google and back,
+      // so loginWithGoogle() has nothing meaningful to return — the actual
+      // sign-in result is picked up by completeGoogleSignIn() below, which
+      // must run once on app mount (see App.jsx).
+      loginWithGoogle: async () => {
+        try {
+          await signInWithGoogle()
+        } catch (error) {
+          console.error('Google redirect failed to start:', error.message)
+        }
+      },
+
+      completeGoogleSignIn: async () => {
+        try {
+          const firebaseUser = await handleGoogleRedirectResult()
+          if (!firebaseUser) return // normal page load, not a redirect return
+
+          const tokenResult = await firebaseUser.getIdTokenResult(true)
+          const isAdmin = tokenResult.claims.admin === true
+          const userData = await getUserData(firebaseUser.uid)
+
+          set({
+            user: {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              firstName:
+                userData?.firstName ||
+                firebaseUser.displayName?.split(' ')[0] ||
+                'User',
+              lastName:
+                userData?.lastName ||
+                firebaseUser.displayName?.split(' ')[1] ||
+                '',
+              isAdmin,
+            },
+            isAuthenticated: true,
+            isAdmin,
+            favorites: userData?.favorites || [],
+          })
+        } catch (error) {
+          console.error('Completing Google sign-in failed:', error.message)
+        }
       },
 
       // ─── ORDERS ───
