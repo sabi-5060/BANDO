@@ -1,6 +1,5 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
 import { useStore } from './store/useStore'
 import Navbar from './components/Navbar'
 import CartDrawer from './components/CartDrawer'
@@ -46,24 +45,31 @@ function ScrollToTop() {
 
 export default function App() {
   const initAuth = useStore((s) => s.initAuth)
-const subscribeToProducts = useStore((s) => s.subscribeToProducts)
-const unsubscribeFromProducts = useStore((s) => s.unsubscribeFromProducts)
-const completeGoogleSignIn = useStore((s) => s.completeGoogleSignIn)
-
+  const subscribeToProducts = useStore((s) => s.subscribeToProducts)
+  const unsubscribeFromProducts = useStore((s) => s.unsubscribeFromProducts)
+  const completeGoogleSignIn = useStore((s) => s.completeGoogleSignIn)
+  const navigate = useNavigate()
 
   useEffect(() => {
-  const unsubAuth = initAuth()
-  subscribeToProducts()
-  completeGoogleSignIn() // picks up the user if we just returned from Google
- 
-  return () => {
-    unsubAuth?.()
-    unsubscribeFromProducts()
-  }
-}, [])
+    const unsubAuth = initAuth()
+    subscribeToProducts()
+
+    // If we just came back from a Google redirect, this resolves true
+    // and we send the user to the homepage. On a normal page load
+    // (no redirect happened) it resolves false and this does nothing.
+    completeGoogleSignIn().then((signedIn) => {
+      if (signedIn) {
+        navigate('/')
+      }
+    })
+
+    return () => {
+      unsubAuth?.()
+      unsubscribeFromProducts()
+    }
+  }, [])
 
   return (
-    
     <div className="min-h-screen bg-bando-black text-bando-white">
       <ScrollToTop />
       <Navbar />
@@ -78,13 +84,13 @@ const completeGoogleSignIn = useStore((s) => s.completeGoogleSignIn)
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />
-          
+
           {/* NEW: Footer pages */}
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/shipping-returns" element={<ShippingReturnsPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
-          
+
           <Route path="/account" element={
             <ProtectedRoute>
               <AccountPage />
@@ -110,5 +116,4 @@ const completeGoogleSignIn = useStore((s) => s.completeGoogleSignIn)
       <Footer />
     </div>
   )
-  
 }
