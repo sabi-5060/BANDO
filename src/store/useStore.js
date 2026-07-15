@@ -324,7 +324,7 @@ export const useStore = create(
       completeGoogleSignIn: async () => {
         try {
           const firebaseUser = await handleGoogleRedirectResult()
-          if (!firebaseUser) return // normal page load, not a redirect return
+          if (!firebaseUser) return false // normal page load, not a redirect return
 
           const tokenResult = await firebaseUser.getIdTokenResult(true)
           const isAdmin = tokenResult.claims.admin === true
@@ -348,8 +348,10 @@ export const useStore = create(
             isAdmin,
             favorites: userData?.favorites || [],
           })
+          return true
         } catch (error) {
           console.error('Completing Google sign-in failed:', error.message)
+          return false
         }
       },
 
