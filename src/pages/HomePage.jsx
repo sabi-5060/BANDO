@@ -30,9 +30,9 @@ export default function HomePage() {
           >
             <div className="flex items-center justify-center gap-3 mb-6">
               <Crown className="w-8 h-8 text-bando-gold" />
-              <span className="text-bando-gold tracking-[0.3em] text-sm font-medium">EST. 2024</span>
+              <span className="text-bando-gold tracking-[0.15em] text-sm font-signature ">Wear the merge</span>
             </div>
-            <h1 className="heading-display text-5xl md:text-7xl lg:text-8xl mb-6 text-balance">
+            <h1 className="heading-display text-5xl md:text-7xl lg:text-8xl mb-6 text-balance" >
               BANDO <span className="text-gradient-gold">by Daniel Jobs</span>
             </h1>
             <p className="text-bando-ash text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
