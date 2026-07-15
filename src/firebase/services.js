@@ -21,6 +21,9 @@ import {
 } from 'firebase/auth'
 import { db, auth } from './config'
 import { onSnapshot } from 'firebase/firestore'
+import { GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth'
+
+const googleProvider = new GoogleAuthProvider()
 
 export const subscribeToProducts = (callback) => {
   const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'))
@@ -121,6 +124,36 @@ export const logoutUser = async () => {
   await signOut(auth)
 }
 
+
+
+
+export const signInWithGoogle = async () => {
+  await signInWithRedirect(auth, googleProvider)
+}
+
+export const handleGoogleRedirectResult = async () => {
+  const result = await getRedirectResult(auth)
+  if (!result) return null
+ 
+  const user = result.user
+  const isNewUser =
+    user.metadata.creationTime === user.metadata.lastSignInTime
+ 
+  if (isNewUser) {
+    const nameParts = (user.displayName || '').split(' ')
+    await setDoc(doc(db, 'users', user.uid), {
+      email: user.email,
+      firstName: nameParts[0] || 'User',
+      lastName: nameParts.slice(1).join(' ') || '',
+      isAdmin: false,
+      favorites: [],
+      createdAt: serverTimestamp(),
+    })
+  }
+ 
+  return user
+}
+
 export const getCurrentUser = () => {
   return auth.currentUser
 }
@@ -142,6 +175,7 @@ export const updateUserFavorites = async (userId, favorites) => {
     updatedAt: serverTimestamp(),
   })
 }
+
 
 // ============================================
 // ORDERS
