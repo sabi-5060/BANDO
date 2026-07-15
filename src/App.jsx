@@ -46,16 +46,21 @@ function ScrollToTop() {
 
 export default function App() {
   const initAuth = useStore((s) => s.initAuth)
-  const subscribeToProducts = useStore((s) => s.subscribeToProducts)
+const subscribeToProducts = useStore((s) => s.subscribeToProducts)
+const unsubscribeFromProducts = useStore((s) => s.unsubscribeFromProducts)
+const completeGoogleSignIn = useStore((s) => s.completeGoogleSignIn)
+
 
   useEffect(() => {
-    const unsubAuth = initAuth()
-    const unsubProducts = subscribeToProducts()
-    return () => {
-      unsubAuth?.()
-      unsubProducts?.()
-    }
-  }, [])
+  const unsubAuth = initAuth()
+  subscribeToProducts()
+  completeGoogleSignIn() // picks up the user if we just returned from Google
+ 
+  return () => {
+    unsubAuth?.()
+    unsubscribeFromProducts()
+  }
+}, [])
 
   return (
     
