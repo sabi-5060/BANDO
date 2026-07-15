@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useStore } from './store/useStore'
 import Navbar from './components/Navbar'
@@ -47,21 +47,10 @@ export default function App() {
   const initAuth = useStore((s) => s.initAuth)
   const subscribeToProducts = useStore((s) => s.subscribeToProducts)
   const unsubscribeFromProducts = useStore((s) => s.unsubscribeFromProducts)
-  const completeGoogleSignIn = useStore((s) => s.completeGoogleSignIn)
-  const navigate = useNavigate()
 
   useEffect(() => {
     const unsubAuth = initAuth()
     subscribeToProducts()
-
-    // If we just came back from a Google redirect, this resolves true
-    // and we send the user to the homepage. On a normal page load
-    // (no redirect happened) it resolves false and this does nothing.
-    completeGoogleSignIn().then((signedIn) => {
-      if (signedIn) {
-        navigate('/')
-      }
-    })
 
     return () => {
       unsubAuth?.()
