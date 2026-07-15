@@ -4,6 +4,18 @@ import { Crown, Eye, EyeOff, ArrowRight } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { motion } from 'framer-motion'
 
+// Simple inline Google "G" logo — avoids pulling in an extra icon package
+function GoogleIcon(props) {
+  return (
+    <svg viewBox="0 0 48 48" width="20" height="20" {...props}>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C33.5 5.1 29 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.4-.4-3.5z"/>
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C33.5 5.1 29 3 24 3 16.3 3 9.6 7.3 6.3 14.7z"/>
+      <path fill="#4CAF50" d="M24 45c5 0 9.5-1.9 12.9-5.1l-6-5c-2 1.4-4.7 2.2-6.9 2.2-5.3 0-9.7-3.4-11.3-8l-6.6 5C9.5 40.6 16.2 45 24 45z"/>
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.4l6 5C40.7 35.4 44 30.2 44 24c0-1.4-.1-2.4-.4-3.5z"/>
+    </svg>
+  )
+}
+
 export default function SignupPage() {
   const [formData, setFormData] = useState({
     firstName: '',
@@ -15,7 +27,8 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const { signup } = useStore()
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const { signup, loginWithGoogle } = useStore()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -38,11 +51,19 @@ export default function SignupPage() {
       firstName: formData.firstName,
       lastName: formData.lastName,
     })
-    
+
     if (success) {
       navigate('/')
     }
     setIsLoading(false)
+  }
+
+  const handleGoogleSignup = async () => {
+    setError('')
+    setIsGoogleLoading(true)
+    // Page will redirect to Google here — completeGoogleSignIn() in App.jsx
+    // picks up the result when the user is sent back to this app.
+    await loginWithGoogle()
   }
 
   return (
@@ -64,6 +85,28 @@ export default function SignupPage() {
               {error}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={handleGoogleSignup}
+            disabled={isGoogleLoading}
+            className="w-full flex items-center justify-center gap-3 bg-bando-black border border-bando-graphite rounded-lg px-4 py-3 text-bando-white hover:border-bando-gold transition-colors mb-6 disabled:opacity-60"
+          >
+            {isGoogleLoading ? (
+              <div className="w-5 h-5 border-2 border-bando-white/30 border-t-bando-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <GoogleIcon />
+                <span className="text-sm font-medium">Continue with Google</span>
+              </>
+            )}
+          </button>
+
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex-1 h-px bg-bando-graphite/50" />
+            <span className="text-xs text-bando-ash uppercase tracking-wide">or sign up with email</span>
+            <div className="flex-1 h-px bg-bando-graphite/50" />
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-2 gap-4">
