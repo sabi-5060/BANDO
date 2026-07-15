@@ -61,9 +61,13 @@ export default function SignupPage() {
   const handleGoogleSignup = async () => {
     setError('')
     setIsGoogleLoading(true)
-    // Page will redirect to Google here — completeGoogleSignIn() in App.jsx
-    // picks up the result when the user is sent back to this app.
-    await loginWithGoogle()
+    const success = await loginWithGoogle()
+    if (success) {
+      navigate('/')
+    } else {
+      setError('Google sign-in failed. Please try again.')
+    }
+    setIsGoogleLoading(false)
   }
 
   return (
