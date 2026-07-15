@@ -11,6 +11,7 @@ import {
   where,
   orderBy,
   serverTimestamp,
+  onSnapshot,
 } from 'firebase/firestore'
 import {
   createUserWithEmailAndPassword,
@@ -18,10 +19,10 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  GoogleAuthProvider,
+  signInWithPopup,
 } from 'firebase/auth'
 import { db, auth } from './config'
-import { onSnapshot } from 'firebase/firestore'
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth'
 
 const googleProvider = new GoogleAuthProvider()
 
@@ -124,21 +125,16 @@ export const logoutUser = async () => {
   await signOut(auth)
 }
 
-
-
-
+// Popup-based Google sign-in. Must be called synchronously in response to a
+// user click (no await before it in the caller) or browsers may block it.
 export const signInWithGoogle = async () => {
-  await signInWithRedirect(auth, googleProvider)
-}
-
-export const handleGoogleRedirectResult = async () => {
-  const result = await getRedirectResult(auth)
-  if (!result) return null
- 
+  const result = await signInWithPopup(auth, googleProvider)
   const user = result.user
   const isNewUser =
     user.metadata.creationTime === user.metadata.lastSignInTime
- 
+
+  // Create a users/{uid} doc the first time this Google account signs in,
+  // same shape as your email/password signup creates.
   if (isNewUser) {
     const nameParts = (user.displayName || '').split(' ')
     await setDoc(doc(db, 'users', user.uid), {
@@ -150,7 +146,7 @@ export const handleGoogleRedirectResult = async () => {
       createdAt: serverTimestamp(),
     })
   }
- 
+
   return user
 }
 
@@ -175,7 +171,6 @@ export const updateUserFavorites = async (userId, favorites) => {
     updatedAt: serverTimestamp(),
   })
 }
-
 
 // ============================================
 // ORDERS
