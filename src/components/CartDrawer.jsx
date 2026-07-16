@@ -9,6 +9,10 @@ export default function CartDrawer() {
   const { isCartOpen, setCartOpen, cart, removeFromCart, updateCartQuantity, getCartTotal, clearCart } = useStore()
   const drawerRef = useRef(null)
   const total = getCartTotal()
+  const cartCount = cart.reduce(
+  (total, item) => total + item.quantity,
+  0
+)
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -116,7 +120,12 @@ export default function CartDrawer() {
                           onClick={() =>
                             updateCartQuantity(item.product.id, item.size, item.color, item.quantity + 1)
                           }
-                          className="p-1 hover:bg-bando-graphite rounded transition-colors"
+                          disabled={cartCount >= 5}
+                          className={`p-1 rounded transition-colors ${
+  cartCount >= 5
+    ? 'opacity-40 cursor-not-allowed'
+    : 'hover:bg-bando-graphite'
+}`}
                         >
                           <Plus className="w-4 h-4" />
                         </button>
