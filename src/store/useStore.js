@@ -20,6 +20,8 @@ import {
   signInWithGoogle,
 } from '../firebase/services'
 
+const MAX_CART_ITEMS = 5
+
 export const useStore = create(
   persist(
     (set, get) => ({
@@ -106,58 +108,103 @@ export const useStore = create(
       },
 
       // ─── CART ───
-      cart: [],
-      addToCart: (item) =>
-        set((state) => {
-          const existing = state.cart.find(
-            (i) =>
-              i.product.id === item.product.id &&
-              i.size === item.size &&
-              i.color === item.color
-          )
-          if (existing) {
-            return {
-              cart: state.cart.map((i) =>
-                i.product.id === item.product.id &&
-                i.size === item.size &&
-                i.color === item.color
-                  ? { ...i, quantity: i.quantity + item.quantity }
-                  : i
-              ),
-            }
-          }
-          return { cart: [...state.cart, item] }
-        }),
-      removeFromCart: (productId, size, color) =>
-        set((state) => ({
-          cart: state.cart.filter(
-            (i) =>
-              !(
-                i.product.id === productId &&
-                i.size === size &&
-                i.color === color
-              )
-          ),
-        })),
-      updateCartQuantity: (productId, size, color, quantity) =>
-        set((state) => ({
-          cart: state.cart.map((i) =>
-            i.product.id === productId &&
-            i.size === size &&
-            i.color === color
-              ? { ...i, quantity }
-              : i
-          ),
-        })),
-      clearCart: () => set({ cart: [] }),
-      getCartTotal: () => {
-        return get().cart.reduce((total, item) => {
-          return total + item.product.price * item.quantity
-        }, 0)
-      },
-      getCartCount: () => {
-        return get().cart.reduce((count, item) => count + item.quantity, 0)
-      },
+cart: [],
+
+getCartCount: () => {
+  return get().cart.reduce((count, item) => count + item.quantity, 0)
+},
+
+addToCart: (item) =>
+  set((state) => {
+    const currentTotal = state.cart.reduce(
+      (count, cartItem) => count + cartItem.quantity,
+      0
+    )
+
+    // Prevent exceeding 5 total items
+    if (currentTotal + item.quantity > MAX_CART_ITEMS) {
+      return state
+    }
+
+    const existing = state.cart.find(
+      (i) =>
+        i.product.id === item.product.id &&
+        i.size === item.size &&
+        i.color === item.color
+    )
+
+    if (existing) {
+      return {
+        cart: state.cart.map((i) =>
+          i.product.id === item.product.id &&
+          i.size === item.size &&
+          i.color === item.color
+            ? { ...i, quantity: i.quantity + item.quantity }
+            : i
+        ),
+      }
+    }
+
+    return { cart: [...state.cart, item] }
+  }),
+
+removeFromCart: (productId, size, color) =>
+  set((state) => ({
+    cart: state.cart.filter(
+      (i) =>
+        !(
+          i.product.id === productId &&
+          i.size === size &&
+          i.color === color
+        )
+    ),
+  })),
+
+updateCartQuantity: (productId, size, color, quantity) =>
+  set((state) => {
+    const currentItem = state.cart.find(
+      (i) =>
+        i.product.id === productId &&
+        i.size === size &&
+        i.color === color
+    )
+
+    if (!currentItem) return state
+
+    const otherItemsTotal = state.cart.reduce((total, item) => {
+      if (
+        item.product.id === productId &&
+        item.size === size &&
+        item.color === color
+      ) {
+        return total
+      }
+      return total + item.quantity
+    }, 0)
+
+    // Prevent total cart quantity exceeding 5
+    if (otherItemsTotal + quantity > MAX_CART_ITEMS) {
+      return state
+    }
+
+    return {
+      cart: state.cart.map((i) =>
+        i.product.id === productId &&
+        i.size === size &&
+        i.color === color
+          ? { ...i, quantity }
+          : i
+      ),
+    }
+  }),
+
+clearCart: () => set({ cart: [] }),
+
+getCartTotal: () => {
+  return get().cart.reduce((total, item) => {
+    return total + item.product.price * item.quantity
+  }, 0)
+},
 
       // ─── FAVORITES ───
       favorites: [],
