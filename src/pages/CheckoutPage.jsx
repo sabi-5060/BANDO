@@ -24,7 +24,7 @@ export default function CheckoutPage() {
   })
 
   const total = getCartTotal()
-  const shipping = total > 30000 ? 0 : 2500
+  const shipping = total > 30000 ? 0 : 0
   const finalTotal = total + shipping
 
   const handleShippingSubmit = (e) => {
