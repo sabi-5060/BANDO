@@ -5,7 +5,7 @@ import { useStore } from '../store/useStore'
 import ProductCard from '../components/ProductCard'
 
 export default function HomePage() {
-  const { products } = useStore()
+  const { products, productsInitialized } = useStore()
 
   const featuredProducts = products
     .filter((p) => (p.isBestseller || p.isNew) && p.inStock)
@@ -117,7 +117,13 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {featuredProducts.length > 0 ? (
+        {!productsInitialized ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="aspect-[3/4] bg-bando-charcoal rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : featuredProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {featuredProducts.map((product, i) => (
               <ProductCard key={product.id} product={product} index={i} />
@@ -140,7 +146,13 @@ export default function HomePage() {
           </Link>
         </div>
 
-        {georgeStinneyProducts.length > 0 ? (
+        {!productsInitialized ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="aspect-[3/4] bg-bando-charcoal rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : georgeStinneyProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {georgeStinneyProducts.map((product, i) => (
               <ProductCard key={product.id} product={product} index={i} />
