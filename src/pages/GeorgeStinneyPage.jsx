@@ -18,7 +18,7 @@ Seventy years later, in 2014, a South Carolina judge vacated his conviction, rul
 Today, we honor his memory by fighting for justice, education, and opportunity for every child.`
 
 export default function GeorgeStinneyPage() {
-  const { products } = useStore() // ✅ Pull products from store
+  const { products, productsInitialized } = useStore()
 
   const georgeProducts = products.filter((p) => p.isGeorgeStinney && p.inStock)
 
@@ -108,7 +108,13 @@ export default function GeorgeStinneyPage() {
           </div>
         </div>
 
-        {georgeProducts.length > 0 ? (
+        {!productsInitialized ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="aspect-[3/4] bg-bando-charcoal rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : georgeProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {georgeProducts.map((product, i) => (
               <ProductCard key={product.id} product={product} index={i} />
