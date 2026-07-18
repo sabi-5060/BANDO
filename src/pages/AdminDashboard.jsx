@@ -1,13 +1,14 @@
 import { useState, useRef } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useStore } from '../store/useStore'
-import { 
-  LayoutDashboard, Package, ShoppingCart, TrendingUp, 
+import {
+  LayoutDashboard, Package, ShoppingCart, TrendingUp,
   Plus, Edit2, Trash2, AlertCircle, CheckCircle, XCircle,
-  Upload, Link, Image, X, Camera, GripVertical
+  Upload, Link, Image, X, Camera, GripVertical, Loader2
 } from 'lucide-react'
 import { formatPrice, formatDate } from '../lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
+import { uploadProductImage } from '../firebase/services'
 
 export default function AdminDashboard() {
   const { isAdmin, products, orders, updateProduct, addProduct, deleteProduct, declareSoldOut, updateOrderStatus } = useStore()
@@ -155,8 +156,6 @@ export default function AdminDashboard() {
                   product={editingProduct}
                   onSave={(productData) => {
                     if (editingProduct) {
-                      // CRITICAL FIX: Pass the ORIGINAL editingProduct.id
-                      // The form data may have a different or missing id
                       updateProduct(editingProduct.id, productData)
                     } else {
                       addProduct(productData)
@@ -333,13 +332,15 @@ function ProductForm({ product, onSave, onCancel }) {
   const [imageMode, setImageMode] = useState('url')
   const [imageUrlInput, setImageUrlInput] = useState('')
   const [previewImages, setPreviewImages] = useState(product?.images || [])
-  
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
   const [newColorName, setNewColorName] = useState('')
   const [newColorHex, setNewColorHex] = useState('#0a0a0a')
   const [newSize, setNewSize] = useState('')
   const [newDetail, setNewDetail] = useState('')
   const [newCareItem, setNewCareItem] = useState('')
-  
+
   const [formData, setFormData] = useState(
     product || {
       name: '',
@@ -362,23 +363,34 @@ function ProductForm({ product, onSave, onCancel }) {
   )
 
   // ==================== IMAGE HANDLERS ====================
-  
-  const handleFileSelect = (e) => {
+
+  // Uploads each selected file to Firebase Storage and stores the resulting
+  // URL in formData.images — NOT the raw base64 data. Embedding base64
+  // directly in Firestore documents blows past the 1 MiB per-document
+  // limit very quickly with real photos.
+  const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files)
     if (files.length === 0) return
 
-    files.forEach((file) => {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const base64String = reader.result
-        setPreviewImages((prev) => [...prev, base64String])
+    setUploadError('')
+    setIsUploading(true)
+
+    try {
+      for (const file of files) {
+        const url = await uploadProductImage(file)
+        setPreviewImages((prev) => [...prev, url])
         setFormData((prev) => ({
           ...prev,
-          images: [...prev.images, base64String],
+          images: [...prev.images, url],
         }))
       }
-      reader.readAsDataURL(file)
-    })
+    } catch (error) {
+      console.error('Image upload failed:', error)
+      setUploadError('One or more images failed to upload. Please try again.')
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   const handleAddUrlImage = () => {
@@ -400,7 +412,7 @@ function ProductForm({ product, onSave, onCancel }) {
   }
 
   // ==================== COLOR HANDLERS ====================
-  
+
   const handleAddColor = () => {
     if (!newColorName.trim()) return
     const colorExists = formData.colors.some(
@@ -433,7 +445,7 @@ function ProductForm({ product, onSave, onCancel }) {
   }
 
   // ==================== SIZE HANDLERS ====================
-  
+
   const handleAddSize = () => {
     if (!newSize.trim()) return
     const sizeExists = formData.sizes.some(
@@ -460,16 +472,16 @@ function ProductForm({ product, onSave, onCancel }) {
   const handleMoveSize = (index, direction) => {
     if (direction === 'up' && index === 0) return
     if (direction === 'down' && index === formData.sizes.length - 1) return
-    
+
     const newSizes = [...formData.sizes]
     const targetIndex = direction === 'up' ? index - 1 : index + 1
     ;[newSizes[index], newSizes[targetIndex]] = [newSizes[targetIndex], newSizes[index]]
-    
+
     setFormData((prev) => ({ ...prev, sizes: newSizes }))
   }
 
   // ==================== DETAILS HANDLERS ====================
-  
+
   const handleAddDetail = () => {
     if (!newDetail.trim()) return
     setFormData((prev) => ({
@@ -494,7 +506,7 @@ function ProductForm({ product, onSave, onCancel }) {
   }
 
   // ==================== CARE HANDLERS ====================
-  
+
   const handleAddCareItem = () => {
     if (!newCareItem.trim()) return
     setFormData((prev) => ({
@@ -519,7 +531,7 @@ function ProductForm({ product, onSave, onCancel }) {
   }
 
   // ==================== SUBMIT ====================
-  
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (formData.images.length === 0) {
@@ -547,9 +559,9 @@ function ProductForm({ product, onSave, onCancel }) {
       <h3 className="font-display text-lg font-semibold mb-6">
         {product ? 'Edit Product' : 'Add New Product'}
       </h3>
-      
+
       <form onSubmit={handleSubmit} className="space-y-8">
-        
+
         {/* ==================== IMAGE UPLOAD SECTION ==================== */}
         <div className="bg-bando-black/30 border border-bando-graphite/50 rounded-xl p-6">
           <div className="flex items-center gap-2 mb-4">
@@ -562,8 +574,8 @@ function ProductForm({ product, onSave, onCancel }) {
             <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 mb-4">
               {previewImages.map((img, index) => (
                 <div key={index} className="relative aspect-square rounded-lg overflow-hidden group">
-                  <img 
-                    src={img} 
+                  <img
+                    src={img}
                     alt={`Preview ${index + 1}`}
                     className="w-full h-full object-cover"
                   />
@@ -632,17 +644,31 @@ function ProductForm({ product, onSave, onCancel }) {
                 accept="image/*"
                 multiple
                 onChange={handleFileSelect}
+                disabled={isUploading}
                 className="hidden"
               />
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full py-8 border-2 border-dashed border-bando-graphite rounded-lg flex flex-col items-center gap-2 hover:border-bando-gold hover:bg-bando-gold/5 transition-all"
+                disabled={isUploading}
+                className="w-full py-8 border-2 border-dashed border-bando-graphite rounded-lg flex flex-col items-center gap-2 hover:border-bando-gold hover:bg-bando-gold/5 transition-all disabled:opacity-60"
               >
-                <Image className="w-8 h-8 text-bando-ash" />
-                <p className="text-sm text-bando-ash">Click to browse or drag images here</p>
-                <p className="text-xs text-bando-graphite">Supports JPG, PNG, WEBP</p>
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-8 h-8 text-bando-gold animate-spin" />
+                    <p className="text-sm text-bando-ash">Uploading...</p>
+                  </>
+                ) : (
+                  <>
+                    <Image className="w-8 h-8 text-bando-ash" />
+                    <p className="text-sm text-bando-ash">Click to browse or drag images here</p>
+                    <p className="text-xs text-bando-graphite">Supports JPG, PNG, WEBP</p>
+                  </>
+                )}
               </button>
+              {uploadError && (
+                <p className="text-xs text-red-400 mt-2">{uploadError}</p>
+              )}
             </div>
           )}
         </div>
@@ -1040,7 +1066,7 @@ function ProductForm({ product, onSave, onCancel }) {
 
         {/* ==================== ACTION BUTTONS ==================== */}
         <div className="flex gap-3 pt-4 border-t border-bando-graphite/50">
-          <button type="submit" className="btn-primary">
+          <button type="submit" disabled={isUploading} className="btn-primary disabled:opacity-50">
             {product ? 'Update Product' : 'Add Product'}
           </button>
           <button type="button" onClick={onCancel} className="btn-outline">
