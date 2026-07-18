@@ -8,9 +8,9 @@ import ProductCard from '../components/ProductCard'
 
 export default function ProductDetailPage() {
   const { id } = useParams()
-  const { products, addToCart, setCartOpen, toggleFavorite, isFavorite } = useStore()
+  const { products, productsInitialized, addToCart, setCartOpen, toggleFavorite, isFavorite } = useStore()
   const product = products.find((p) => p.id === id)
-  
+
   const [selectedSize, setSelectedSize] = useState('')
   const [selectedColor, setSelectedColor] = useState('')
   const [selectedImage, setSelectedImage] = useState(0)
@@ -18,6 +18,27 @@ export default function ProductDetailPage() {
   const [shareOpen, setShareOpen] = useState(false)
   const [heartAnim, setHeartAnim] = useState(false)
   const favorited = product ? isFavorite(product.id) : false
+
+  // Until the first server-confirmed Firestore snapshot has arrived, don't
+  // conclude the product doesn't exist — it may just not be in the local
+  // fallback list yet (e.g. it was added via admin after the last visit).
+  if (!productsInitialized) {
+    return (
+      <div className="min-h-screen pt-24 pb-20">
+        <div className="section-padding">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16">
+            <div className="aspect-[3/4] bg-bando-charcoal rounded-lg animate-pulse" />
+            <div className="space-y-4">
+              <div className="h-8 w-2/3 bg-bando-charcoal rounded animate-pulse" />
+              <div className="h-4 w-full bg-bando-charcoal rounded animate-pulse" />
+              <div className="h-4 w-5/6 bg-bando-charcoal rounded animate-pulse" />
+              <div className="h-10 w-1/3 bg-bando-charcoal rounded animate-pulse" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!product) {
     return (
@@ -34,12 +55,18 @@ export default function ProductDetailPage() {
     .filter((p) => p.category === product.category && p.id !== product.id)
     .slice(0, 4)
 
+  // Defaults to the first available size/color when the user hasn't picked
+  // one yet — same behavior as the Quick Add button on ProductCard, so
+  // Add to Cart always works on click instead of silently doing nothing.
   const handleAddToCart = () => {
-    if (!selectedSize || !selectedColor) return
+    const size = selectedSize || product.sizes[0]
+    const color = selectedColor || product.colors[0]?.name
+    if (!size || !color) return
+
     addToCart({
       product,
-      size: selectedSize,
-      color: selectedColor,
+      size,
+      color,
       quantity: 1,
     })
     setAddedToCart(true)
@@ -47,11 +74,14 @@ export default function ProductDetailPage() {
   }
 
   const handleBuyNow = () => {
-    if (!selectedSize || !selectedColor) return
+    const size = selectedSize || product.sizes[0]
+    const color = selectedColor || product.colors[0]?.name
+    if (!size || !color) return
+
     addToCart({
       product,
-      size: selectedSize,
-      color: selectedColor,
+      size,
+      color,
       quantity: 1,
     })
     setCartOpen(true)
@@ -204,7 +234,7 @@ export default function ProductDetailPage() {
             <div className="flex gap-3 pt-4">
               <button
                 onClick={handleAddToCart}
-                disabled={!product.inStock || !selectedSize || !selectedColor}
+                disabled={!product.inStock}
                 className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {addedToCart ? (
@@ -215,13 +245,7 @@ export default function ProductDetailPage() {
                   'Add to Cart'
                 )}
               </button>
-              <button
-                onClick={handleBuyNow}
-                disabled={!product.inStock || !selectedSize || !selectedColor}
-                className="flex-1 btn-outline disabled:opacity-50"
-              >
-                Buy Now
-              </button>
+
 
               {/* Favorite Button */}
               <button
