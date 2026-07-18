@@ -22,16 +22,45 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from 'firebase/auth'
-import { db, auth } from './config'
+import { db, auth, storage } from './config'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 const googleProvider = new GoogleAuthProvider()
 
-export const subscribeToProducts = (callback) => {
+export const subscribeToProducts = (callback, onError) => {
   const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'))
-  return onSnapshot(q, (snapshot) => {
-    const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-    callback(products)
-  })
+  let hasReceivedServerData = false
+
+  // Firestore serves its local cache first on reload, which can be a
+  // moment out of date (e.g. an admin edit made since your last visit).
+  // Skip that first cached emission and wait for the server-confirmed
+  // snapshot instead, so a reload never flashes stale data.
+  const fallbackTimer = setTimeout(() => {
+    hasReceivedServerData = true
+  }, 5000) // if genuinely offline, stop waiting after 5s and accept cache
+
+  const unsubscribe = onSnapshot(
+    q,
+    { includeMetadataChanges: true },
+    (snapshot) => {
+      if (!hasReceivedServerData && snapshot.metadata.fromCache) {
+        return
+      }
+      hasReceivedServerData = true
+      clearTimeout(fallbackTimer)
+      const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      callback(products)
+    },
+    (error) => {
+      clearTimeout(fallbackTimer)
+      if (onError) onError(error)
+    }
+  )
+
+  return () => {
+    clearTimeout(fallbackTimer)
+    unsubscribe()
+  }
 }
 
 // ============================================
@@ -93,6 +122,18 @@ export const declareSoldOut = async (productId) => {
     stockCount: 0,
     updatedAt: serverTimestamp(),
   })
+}
+
+// Uploads a File object to Firebase Storage and returns its public download
+// URL. This is what admin "Upload File" image uploads should use instead of
+// embedding base64 data directly in the Firestore document — Firestore
+// documents are capped at 1 MiB, which base64 images blow past easily.
+export const uploadProductImage = async (file) => {
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')
+  const path = `products/${Date.now()}-${safeName}`
+  const storageRef = ref(storage, path)
+  await uploadBytes(storageRef, file)
+  return await getDownloadURL(storageRef)
 }
 
 // ============================================
