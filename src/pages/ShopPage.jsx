@@ -23,18 +23,18 @@ const sortOptions = [
 
 export default function ShopPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { products } = useStore()
+  const { products, productsInitialized } = useStore()
   const [activeCategory, setActiveCategory] = useState(searchParams.get('t') || 'all')
   const [sortBy, setSortBy] = useState('newest')
   const [viewMode, setViewMode] = useState('grid')
 
   const filteredProducts = useMemo(() => {
     let filtered = [...products]
-    
+
     if (activeCategory !== 'all') {
       filtered = filtered.filter(p => p.category === activeCategory)
     }
-    
+
     switch (sortBy) {
       case 'price-low':
         filtered.sort((a, b) => a.price - b.price)
@@ -48,7 +48,7 @@ export default function ShopPage() {
       default:
         filtered.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0))
     }
-    
+
     return filtered
   }, [products, activeCategory, sortBy])
 
@@ -101,7 +101,7 @@ export default function ShopPage() {
                 <option key={opt.id} value={opt.id}>{opt.label}</option>
               ))}
             </select>
-            
+
             <div className="flex bg-bando-charcoal rounded-lg p-1">
               <button
                 onClick={() => setViewMode('grid')}
@@ -120,28 +120,44 @@ export default function ShopPage() {
         </div>
 
         {/* Products Grid */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeCategory + sortBy}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+        {!productsInitialized ? (
+          <div
             className={`grid gap-6 ${
               viewMode === 'grid'
                 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
                 : 'grid-cols-1'
             }`}
           >
-            {filteredProducts.map((product, i) => (
-              <ProductCard key={product.id} product={product} index={i} />
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="aspect-[3/4] bg-bando-charcoal rounded-lg animate-pulse" />
             ))}
-          </motion.div>
-        </AnimatePresence>
-
-        {filteredProducts.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-bando-ash text-lg">No products found in this category.</p>
           </div>
+        ) : (
+          <>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeCategory + sortBy}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className={`grid gap-6 ${
+                  viewMode === 'grid'
+                    ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                    : 'grid-cols-1'
+                }`}
+              >
+                {filteredProducts.map((product, i) => (
+                  <ProductCard key={product.id} product={product} index={i} />
+                ))}
+              </motion.div>
+            </AnimatePresence>
+
+            {filteredProducts.length === 0 && (
+              <div className="text-center py-20">
+                <p className="text-bando-ash text-lg">No products found in this category.</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
