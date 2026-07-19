@@ -4,16 +4,37 @@ import { useStore } from '../store/useStore'
 import { 
   LayoutDashboard, Package, ShoppingCart, TrendingUp, 
   Plus, Edit2, Trash2, AlertCircle, CheckCircle, XCircle,
-  Upload, Link, Image, X, Camera, GripVertical
+  Upload, Link, Image, X, Camera, GripVertical, Eye
 } from 'lucide-react'
 import { formatPrice, formatDate } from '../lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
+
+// Firestore's serverTimestamp() arrives as a Timestamp object (with a
+// .toDate() method), not a plain JS Date or string — formatDate() alone
+// can't handle that. This converts safely, and falls back to "Just now"
+// for an order whose timestamp hasn't been confirmed by the server yet
+// (which happens briefly right after checkout, before the write commits).
+function formatOrderDate(createdAt) {
+  if (!createdAt) return 'Just now'
+  const date = typeof createdAt.toDate === 'function' ? createdAt.toDate() : new Date(createdAt)
+  if (isNaN(date.getTime())) return 'Just now'
+  return formatDate(date)
+}
+
+const STATUS_STYLES = {
+  delivered: 'bg-green-500/20 text-green-400',
+  shipped: 'bg-blue-500/20 text-blue-400',
+  processing: 'bg-purple-500/20 text-purple-400',
+  pending: 'bg-yellow-500/20 text-yellow-400',
+  cancelled: 'bg-red-500/20 text-red-400',
+}
 
 export default function AdminDashboard() {
   const { isAdmin, products, orders, updateProduct, addProduct, deleteProduct, declareSoldOut, updateOrderStatus } = useStore()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [editingProduct, setEditingProduct] = useState(null)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [viewingOrder, setViewingOrder] = useState(null)
 
   if (!isAdmin) {
     return <Navigate to="/" replace />
@@ -108,19 +129,14 @@ export default function AdminDashboard() {
                       {orders.slice(0, 5).map((order) => (
                         <tr key={order.id} className="border-b border-bando-graphite/30">
                           <td className="py-3 pr-4 font-mono text-sm">{order.id.slice(0, 8)}</td>
-                          <td className="py-3 pr-4 text-sm text-bando-ash">{formatDate(order.createdAt)}</td>
+                          <td className="py-3 pr-4 text-sm text-bando-ash">{formatOrderDate(order.createdAt)}</td>
                           <td className="py-3 pr-4 font-semibold">{formatPrice(order.total)}</td>
                           <td className="py-3 pr-4">
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              order.status === 'delivered' ? 'bg-green-500/20 text-green-400' :
-                              order.status === 'shipped' ? 'bg-blue-500/20 text-blue-400' :
-                              order.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                              'bg-red-500/20 text-red-400'
-                            }`}>
+                            <span className={`text-xs px-2 py-1 rounded-full ${STATUS_STYLES[order.status] || STATUS_STYLES.pending}`}>
                               {order.status}
                             </span>
                           </td>
-                          <td className="py-3 text-sm text-bando-ash">{order.items.length} items</td>
+                          <td className="py-3 text-sm text-bando-ash">{order.items?.length || 0} items</td>
                         </tr>
                       ))}
                     </tbody>
@@ -280,14 +296,14 @@ export default function AdminDashboard() {
                       <th className="p-4">Total</th>
                       <th className="p-4">Payment</th>
                       <th className="p-4">Status</th>
-                      <th className="p-4">Actions</th>
+                      <th className="p-4 text-right">Details</th>
                     </tr>
                   </thead>
                   <tbody>
                     {orders.map((order) => (
                       <tr key={order.id} className="border-b border-bando-graphite/30 hover:bg-bando-black/20 transition-colors">
                         <td className="p-4 font-mono text-sm">{order.id.slice(0, 12)}</td>
-                        <td className="p-4 text-sm text-bando-ash">{formatDate(order.createdAt)}</td>
+                        <td className="p-4 text-sm text-bando-ash whitespace-nowrap">{formatOrderDate(order.createdAt)}</td>
                         <td className="p-4 text-sm">{order.shippingAddress?.fullName || 'Guest'}</td>
                         <td className="p-4 font-semibold">{formatPrice(order.total)}</td>
                         <td className="p-4 text-sm text-bando-ash capitalize">{order.paymentMethod || 'N/A'}</td>
@@ -295,7 +311,7 @@ export default function AdminDashboard() {
                           <select
                             value={order.status}
                             onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                            className="bg-bando-black border border-bando-graphite rounded px-2 py-1 text-sm focus:border-bando-gold outline-none"
+                            className={`border border-bando-graphite rounded px-2 py-1 text-sm outline-none focus:border-bando-gold ${STATUS_STYLES[order.status] || STATUS_STYLES.pending} bg-bando-black`}
                           >
                             <option value="pending">Pending</option>
                             <option value="processing">Processing</option>
@@ -304,9 +320,12 @@ export default function AdminDashboard() {
                             <option value="cancelled">Cancelled</option>
                           </select>
                         </td>
-                        <td className="p-4">
-                          <button className="text-sm text-bando-gold hover:text-bando-gold-light">
-                            View Details
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => setViewingOrder(order)}
+                            className="inline-flex items-center gap-1 text-sm text-bando-gold hover:text-bando-gold-light transition-colors"
+                          >
+                            <Eye className="w-4 h-4" /> View
                           </button>
                         </td>
                       </tr>
@@ -321,7 +340,134 @@ export default function AdminDashboard() {
           </motion.div>
         )}
       </div>
+
+      {/* Order Details Modal */}
+      <AnimatePresence>
+        {viewingOrder && (
+          <OrderDetailsModal
+            order={viewingOrder}
+            onClose={() => setViewingOrder(null)}
+            onStatusChange={(status) => updateOrderStatus(viewingOrder.id, status)}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+// ============================================
+// Order Details Modal
+// ============================================
+function OrderDetailsModal({ order, onClose, onStatusChange }) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      >
+        <div className="bg-bando-charcoal border border-bando-graphite rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+          <div className="flex items-center justify-between p-6 border-b border-bando-graphite sticky top-0 bg-bando-charcoal">
+            <div>
+              <h3 className="font-display text-lg font-semibold">Order Details</h3>
+              <p className="text-xs text-bando-ash font-mono mt-1">{order.id}</p>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-bando-graphite rounded-full transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Status + Date */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-xs text-bando-ash mb-1">Placed</p>
+                <p className="text-sm">{formatOrderDate(order.createdAt)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-bando-ash mb-1">Status</p>
+                <select
+                  value={order.status}
+                  onChange={(e) => onStatusChange(e.target.value)}
+                  className={`border border-bando-graphite rounded px-3 py-1.5 text-sm outline-none focus:border-bando-gold bg-bando-black ${STATUS_STYLES[order.status] || STATUS_STYLES.pending}`}
+                >
+                  <option value="pending">Pending</option>
+                  <option value="processing">Processing</option>
+                  <option value="shipped">Shipped</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Customer / Shipping */}
+            <div className="bg-bando-black/30 rounded-xl p-4">
+              <h4 className="text-sm font-semibold mb-3">Customer</h4>
+              <div className="space-y-1 text-sm text-bando-ash">
+                <p>{order.shippingAddress?.fullName || 'Guest'}</p>
+                {order.shippingAddress?.phone && <p>{order.shippingAddress.phone}</p>}
+                {order.shippingAddress?.email && <p>{order.shippingAddress.email}</p>}
+                {order.shippingAddress?.address && <p>{order.shippingAddress.address}</p>}
+                {(order.shippingAddress?.city || order.shippingAddress?.state) && (
+                  <p>
+                    {[order.shippingAddress?.city, order.shippingAddress?.state]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Items */}
+            <div>
+              <h4 className="text-sm font-semibold mb-3">Items ({order.items?.length || 0})</h4>
+              <div className="space-y-3">
+                {order.items?.map((item, i) => (
+                  <div key={i} className="flex gap-3 bg-bando-black/30 rounded-lg p-3">
+                    {item.product?.images?.[0] && (
+                      <img
+                        src={item.product.images[0]}
+                        alt={item.product?.name}
+                        className="w-14 h-16 object-cover rounded"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.product?.name}</p>
+                      <p className="text-xs text-bando-ash mt-0.5">
+                        {item.color} / {item.size} · Qty {item.quantity}
+                      </p>
+                      <p className="text-sm text-bando-gold font-semibold mt-1">
+                        {formatPrice((item.product?.price || 0) * item.quantity)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Payment + Total */}
+            <div className="border-t border-bando-graphite/50 pt-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-bando-ash">Payment Method</p>
+                <p className="text-sm capitalize">{order.paymentMethod || 'N/A'}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-bando-ash">Total</p>
+                <p className="text-xl font-bold text-bando-gold">{formatPrice(order.total)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </>
   )
 }
 
