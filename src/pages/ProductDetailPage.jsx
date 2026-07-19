@@ -189,7 +189,7 @@ export default function ProductDetailPage() {
             {/* Color Selection */}
             <div>
               <label className="block text-sm font-medium mb-3">
-                Color {selectedColor && <span className="text-bando-ash">— {selectedColor}</span>}
+                Select Color {selectedColor && <span className="text-bando-ash">— {selectedColor}</span>}
               </label>
               <div className="flex gap-3">
                 {product.colors.map((color) => (
@@ -211,7 +211,7 @@ export default function ProductDetailPage() {
             {/* Size Selection */}
             <div>
               <label className="block text-sm font-medium mb-3">
-                Size {selectedSize && <span className="text-bando-ash">— {selectedSize}</span>}
+                Select Size {selectedSize && <span className="text-bando-ash">— {selectedSize}</span>}
               </label>
               <div className="flex gap-2 flex-wrap">
                 {product.sizes.map((size) => (
