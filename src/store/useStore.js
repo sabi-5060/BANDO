@@ -21,7 +21,7 @@ import {
 } from '../firebase/services'
 
 // Max total items (summed quantity across the whole cart) a customer can order.
-export const MAX_CART_ITEMS = 5
+export const MAX_CART_ITEMS = 1
 
 export const useStore = create(
   persist(
