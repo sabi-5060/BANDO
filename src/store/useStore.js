@@ -14,8 +14,8 @@ import {
   loginUser,
   logoutUser,
   createOrder as fbCreateOrder,
-  getUserOrders as fbGetUserOrders,
-  getAllOrders as fbGetAllOrders,
+  subscribeToUserOrders,
+  subscribeToAllOrders,
   updateOrderStatus as fbUpdateOrderStatus,
   signInWithGoogle,
 } from '../firebase/services'
@@ -242,16 +242,23 @@ export const useStore = create(
                 favorites: userData?.favorites || [],
                 authLoading: false,
               })
+              // Now that we know who's logged in (and whether they're
+              // admin), start the live orders subscription — admin sees
+              // every order, a regular user sees just their own.
+              get().subscribeToOrders()
             } catch (error) {
               console.error('Failed to load user data:', error)
               set({ authLoading: false })
             }
           } else {
+            get().unsubscribeFromOrders?.()
             set({
               user: null,
               isAuthenticated: false,
               isAdmin: false,
               authLoading: false,
+              orders: [],
+              ordersInitialized: false,
             })
           }
         })
@@ -323,12 +330,15 @@ export const useStore = create(
         } catch (error) {
           console.error('Logout error:', error)
         }
+        get().unsubscribeFromOrders?.()
         set({
           user: null,
           isAuthenticated: false,
           isAdmin: false,
           cart: [],
           favorites: [],
+          orders: [],
+          ordersInitialized: false,
         })
       },
 
@@ -374,19 +384,47 @@ export const useStore = create(
       // ─── ORDERS ───
       orders: [],
       ordersLoading: false,
+      ordersInitialized: false,
+      _unsubOrders: null,
 
-      loadOrders: async () => {
+      // Live subscription — call once auth state is known (admin sees all
+      // orders, a regular user sees just their own). Replaces the old
+      // one-time fetch, which only ever populated `orders` if something
+      // explicitly called it — nothing did, so a reload always showed an
+      // empty list even though the order was safely in Firestore.
+      subscribeToOrders: () => {
         const { user, isAdmin } = get()
-        if (!user?.uid) return
+        const existing = get()._unsubOrders
+        if (existing) existing()
+
+        if (!user?.uid) {
+          set({ orders: [], ordersLoading: false, ordersInitialized: false, _unsubOrders: null })
+          return () => {}
+        }
+
         set({ ordersLoading: true })
-        try {
-          const orders = isAdmin
-            ? await fbGetAllOrders()
-            : await fbGetUserOrders(user.uid)
-          set({ orders, ordersLoading: false })
-        } catch (error) {
-          console.error('Failed to load orders:', error)
-          set({ ordersLoading: false })
+
+        const onData = (orders) => {
+          set({ orders, ordersLoading: false, ordersInitialized: true })
+        }
+        const onError = (error) => {
+          console.error('Order subscription failed:', error)
+          set({ ordersLoading: false, ordersInitialized: true })
+        }
+
+        const unsubscribe = isAdmin
+          ? subscribeToAllOrders(onData, onError)
+          : subscribeToUserOrders(user.uid, onData, onError)
+
+        set({ _unsubOrders: unsubscribe })
+        return unsubscribe
+      },
+
+      unsubscribeFromOrders: () => {
+        const unsub = get()._unsubOrders
+        if (unsub) {
+          unsub()
+          set({ _unsubOrders: null })
         }
       },
 
@@ -397,20 +435,15 @@ export const useStore = create(
           userId: user?.uid || 'guest',
         }
         const docRef = await fbCreateOrder(orderWithUser)
-        const newOrder = { id: docRef.id, ...orderWithUser }
-        set((state) => ({
-          orders: [newOrder, ...state.orders],
-        }))
+        // No need to manually push into local state anymore — the live
+        // subscription above will pick up the new order automatically as
+        // soon as Firestore confirms the write.
         return docRef.id
       },
 
       updateOrderStatus: async (orderId, status) => {
         await fbUpdateOrderStatus(orderId, status)
-        set((state) => ({
-          orders: state.orders.map((o) =>
-            o.id === orderId ? { ...o, status } : o
-          ),
-        }))
+        // Subscription picks up the change automatically; no local set needed.
       },
 
       // ─── UI ───
@@ -422,6 +455,7 @@ export const useStore = create(
       // ─── RESET ───
       resetStore: () => {
         get().unsubscribeFromProducts?.()
+        get().unsubscribeFromOrders?.()
         set({
           products: initialProducts,
           cart: [],
@@ -429,6 +463,7 @@ export const useStore = create(
           isAuthenticated: false,
           isAdmin: false,
           orders: [],
+          ordersInitialized: false,
           isCartOpen: false,
           isMobileMenuOpen: false,
           favorites: [],
