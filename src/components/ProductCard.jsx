@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Heart, Share2, ShoppingBag } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { useStore } from '../store/useStore'
+import { useStore, MAX_CART_ITEMS } from '../store/useStore'
 import { formatPrice } from '../lib/utils'
 import { useState } from 'react'
 
@@ -57,12 +57,19 @@ export default function ProductCard({ product, index = 0 }) {
     e.stopPropagation()
     // Add with first available size and color
     if (product.sizes.length > 0 && product.colors.length > 0) {
-      addToCart({
+      const added = addToCart({
         product,
         size: product.sizes[0],
         color: product.colors[0].name,
         quantity: 1,
       })
+      if (!added) {
+        alert(
+          MAX_CART_ITEMS === 1
+            ? 'You can only order 1 item per checkout. Clear your cart to add a different item.'
+            : `You can only order up to ${MAX_CART_ITEMS} items per checkout.`
+        )
+      }
     }
   }
 
@@ -80,7 +87,7 @@ export default function ProductCard({ product, index = 0 }) {
             alt={product.name}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
-          
+
           {/* Overlay gradient on hover */}
           <div className="absolute inset-0 bg-gradient-to-t from-bando-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
