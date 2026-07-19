@@ -120,9 +120,9 @@ export default function CartDrawer() {
                           onClick={() =>
                             updateCartQuantity(item.product.id, item.size, item.color, item.quantity + 1)
                           }
-                          disabled={cartCount >= 5}
+                          disabled={cartCount >= 1}
                           className={`p-1 rounded transition-colors ${
-  cartCount >= 5
+  cartCount >= 1
     ? 'opacity-40 cursor-not-allowed'
     : 'hover:bg-bando-graphite'
 }`}
