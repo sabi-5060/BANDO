@@ -22,49 +22,16 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from 'firebase/auth'
-import { db, auth, storage } from './config'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { db, auth } from './config'
 
 const googleProvider = new GoogleAuthProvider()
 
-// Firestore serves its local cache first on reload, which can be a moment
-// out of date (e.g. an admin edit or new order made since your last visit).
-// Skip that first cached emission and wait for the server-confirmed
-// snapshot instead, so a reload never flashes stale data. Falls back to
-// cache after 5s if genuinely offline.
-function subscribeWithFreshData(q, callback, onError) {
-  let hasReceivedServerData = false
-  const fallbackTimer = setTimeout(() => {
-    hasReceivedServerData = true
-  }, 5000)
-
-  const unsubscribe = onSnapshot(
-    q,
-    { includeMetadataChanges: true },
-    (snapshot) => {
-      if (!hasReceivedServerData && snapshot.metadata.fromCache) {
-        return
-      }
-      hasReceivedServerData = true
-      clearTimeout(fallbackTimer)
-      const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
-      callback(items)
-    },
-    (error) => {
-      clearTimeout(fallbackTimer)
-      if (onError) onError(error)
-    }
-  )
-
-  return () => {
-    clearTimeout(fallbackTimer)
-    unsubscribe()
-  }
-}
-
-export const subscribeToProducts = (callback, onError) => {
+export const subscribeToProducts = (callback) => {
   const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'))
-  return subscribeWithFreshData(q, callback, onError)
+  return onSnapshot(q, (snapshot) => {
+    const products = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+    callback(products)
+  })
 }
 
 // ============================================
@@ -126,18 +93,6 @@ export const declareSoldOut = async (productId) => {
     stockCount: 0,
     updatedAt: serverTimestamp(),
   })
-}
-
-// Uploads a File object to Firebase Storage and returns its public download
-// URL. Admin "Upload File" image uploads use this instead of embedding
-// base64 data directly in the Firestore document — Firestore documents are
-// capped at 1 MiB, which base64 images blow past easily.
-export const uploadProductImage = async (file) => {
-  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')
-  const path = `products/${Date.now()}-${safeName}`
-  const storageRef = ref(storage, path)
-  await uploadBytes(storageRef, file)
-  return await getDownloadURL(storageRef)
 }
 
 // ============================================
@@ -231,21 +186,41 @@ export const createOrder = async (orderData) => {
   })
 }
 
-// Live subscription to a single user's orders — stays in sync automatically,
-// no manual reload/refetch needed. Use on account/order-history pages.
+// Live subscription to a single user's orders. Replaces the old one-time
+// fetch — nothing in the app ever called that fetch automatically, so a
+// reload always showed an empty orders list even though the order was
+// safely saved in Firestore. This stays in sync on its own.
 export const subscribeToUserOrders = (userId, callback, onError) => {
   const q = query(
     collection(db, 'orders'),
     where('userId', '==', userId),
     orderBy('createdAt', 'desc')
   )
-  return subscribeWithFreshData(q, callback, onError)
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      callback(orders)
+    },
+    (error) => {
+      if (onError) onError(error)
+    }
+  )
 }
 
 // Live subscription to ALL orders — for the admin dashboard.
 export const subscribeToAllOrders = (callback, onError) => {
   const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'))
-  return subscribeWithFreshData(q, callback, onError)
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      callback(orders)
+    },
+    (error) => {
+      if (onError) onError(error)
+    }
+  )
 }
 
 export const getUserOrders = async (userId) => {
